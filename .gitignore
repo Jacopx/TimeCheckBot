@@ -1,0 +1,9 @@
+venv/
+credentials.json
+__pycache__/
+*.pyc
+.env
+docker-compose.yml
+Dockerfile
+.dockerignore
+.DS_Store
