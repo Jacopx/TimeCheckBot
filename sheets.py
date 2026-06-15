@@ -50,26 +50,25 @@ def format_duration(seconds: int) -> str:
 
 def record_entrata(user_id: int, username: str) -> dict:
     sheet = get_sheet()
-    total_rows = sheet.row_count
-    last_rows = sheet.get(f"A{max(2, total_rows-10)}:E{total_rows}")
+    all_rows = sheet.get_all_values()
     ts = now_rome()
 
-    # Check for open session
-    for row in last_rows[1:]:
+    # Check for open session in last 10 rows only
+    for row in all_rows[-10:]:
         if len(row) >= 1 and row[0] == str(user_id):
             entrata_filled = len(row) >= 3 and row[2].strip()
             uscita_filled = len(row) >= 4 and row[3].strip()
             if entrata_filled and not uscita_filled:
                 return {"status": "already_open", "timestamp": row[2]}
 
-    next_row = len(last_rows) + 1
+    next_row = len(all_rows) + 1  # correct: based on full sheet
     ts_str = format_ts(ts)
 
     sheet.append_row(
-        [str(user_id), username or "N/A", format_ts(ts), "", f"=IF(D{next_row}<>\"\";D{next_row}-C{next_row};\"\")"],
+        [str(user_id), username or "N/A", ts_str, "", f"=IF(D{next_row}<>\"\";D{next_row}-C{next_row};\"\")"],
         value_input_option="USER_ENTERED",
     )
-    
+
     return {"status": "ok", "timestamp": ts.strftime("%d/%m/%Y %H:%M:%S")}
 
 
