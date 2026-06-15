@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
@@ -42,7 +43,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------------------------------- #
 async def handle_entrata(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    result = record_entrata(user.id, user.username or user.first_name)
+    result = await asyncio.to_thread(record_entrata, user.id, user.username or user.first_name)
 
     if result["status"] == "already_open":
         await update.message.reply_text(
@@ -59,7 +60,7 @@ async def handle_entrata(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_uscita(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    result = record_uscita(user.id)
+    result = await asyncio.to_thread(record_uscita, user.id)
 
     if result["status"] == "no_entrata":
         await update.message.reply_text(
@@ -95,7 +96,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #  Entry point
 # --------------------------------------------------------------------------- #
 def main():
-    import asyncio
     asyncio.set_event_loop(asyncio.new_event_loop())
 
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()

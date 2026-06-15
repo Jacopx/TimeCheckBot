@@ -11,18 +11,15 @@ SCOPES = [
 
 HEADERS = ["User ID", "Username", "Entrata", "Uscita", "Durata"]
 
+_creds = None
+
 
 def get_sheet():
-    """Authenticate and return the worksheet."""
-    creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
-    client = gspread.authorize(creds)
-    spreadsheet = client.open_by_key(SPREADSHEET_ID)
-    try:
-        sheet = spreadsheet.worksheet(SHEET_NAME)
-    except gspread.exceptions.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title=SHEET_NAME, rows=1000, cols=5)
-        sheet.append_row(HEADERS)
-    return sheet
+    global _creds
+    if _creds is None or not _creds.valid:
+        _creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
+    client = gspread.authorize(_creds)
+    return client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
 
 
 def now_rome() -> datetime:
@@ -53,18 +50,19 @@ def format_duration(seconds: int) -> str:
 
 def record_entrata(user_id: int, username: str) -> dict:
     sheet = get_sheet()
-    all_rows = sheet.get_all_values()
+    total_rows = sheet.row_count
+    last_rows = sheet.get(f"A{max(2, total_rows-10)}:E{total_rows}")
     ts = now_rome()
 
     # Check for open session
-    for row in all_rows[1:]:
+    for row in last_rows[1:]:
         if len(row) >= 1 and row[0] == str(user_id):
             entrata_filled = len(row) >= 3 and row[2].strip()
             uscita_filled = len(row) >= 4 and row[3].strip()
             if entrata_filled and not uscita_filled:
                 return {"status": "already_open", "timestamp": row[2]}
 
-    next_row = len(all_rows) + 1
+    next_row = len(last_rows) + 1
     ts_str = format_ts(ts)
 
     sheet.append_row(
