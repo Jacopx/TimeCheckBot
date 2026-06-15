@@ -32,12 +32,12 @@ def now_rome() -> datetime:
 
 
 def format_ts(dt: datetime) -> str:
-    """Format datetime to readable string."""
-    return dt.strftime("%d/%m/%Y %H:%M:%S")
+    """Format datetime in Italian locale format recognized by Google Sheets."""
+    return dt.strftime("%d/%m/%Y %H.%M.%S")
 
 
 def format_duration(seconds: int) -> str:
-    """Format seconds into Xh Ym Zs string."""
+    """Format seconds into Xh Ym Zs string (used only for bot reply message)."""
     h = seconds // 3600
     m = (seconds % 3600) // 60
     s = seconds % 60
@@ -52,37 +52,35 @@ def format_duration(seconds: int) -> str:
 
 
 def record_entrata(user_id: int, username: str) -> dict:
-    """
-    Record a check-in for the user.
-    Returns: {"status": "ok"|"already_open", "timestamp": str}
-    """
     sheet = get_sheet()
     all_rows = sheet.get_all_values()
     ts = now_rome()
 
-    # Check for open session (entrata with no uscita)
-    for i, row in enumerate(all_rows[1:], start=2):  # skip header
+    # Check for open session
+    for row in all_rows[1:]:
         if len(row) >= 1 and row[0] == str(user_id):
             entrata_filled = len(row) >= 3 and row[2].strip()
             uscita_filled = len(row) >= 4 and row[3].strip()
             if entrata_filled and not uscita_filled:
                 return {"status": "already_open", "timestamp": row[2]}
 
-    # Append new row
-    sheet.append_row([str(user_id), username or "N/A", format_ts(ts), "", ""])
-    return {"status": "ok", "timestamp": format_ts(ts)}
+    next_row = len(all_rows) + 1
+    ts_str = format_ts(ts)
+
+    sheet.append_row(
+        [str(user_id), username or "N/A", format_ts(ts), "", f"=IF(D{next_row}<>\"\";D{next_row}-C{next_row};\"\")"],
+        value_input_option="USER_ENTERED",
+    )
+    
+    return {"status": "ok", "timestamp": ts.strftime("%d/%m/%Y %H:%M:%S")}
 
 
 def record_uscita(user_id: int) -> dict:
-    """
-    Record a check-out for the user.
-    Returns: {"status": "ok"|"no_entrata", "entrata": str, "uscita": str, "durata": str}
-    """
     sheet = get_sheet()
     all_rows = sheet.get_all_values()
     ts = now_rome()
 
-    # Find last open session for this user
+    # Find last open session
     open_row_index = None
     open_entrata_str = None
     for i, row in enumerate(all_rows[1:], start=2):
@@ -96,20 +94,18 @@ def record_uscita(user_id: int) -> dict:
     if open_row_index is None:
         return {"status": "no_entrata"}
 
-    # Parse entrata timestamp
-    tz = pytz.timezone(TIMEZONE)
-    entrata_dt = tz.localize(datetime.strptime(open_entrata_str, "%d/%m/%Y %H:%M:%S"))
+    # Parse entrata for bot reply duration
+    entrata_dt = pytz.timezone(TIMEZONE).localize(
+        datetime.strptime(open_entrata_str, "%d/%m/%Y %H.%M.%S")
+    )
     duration_secs = int((ts - entrata_dt).total_seconds())
     durata_str = format_duration(duration_secs)
-    uscita_str = format_ts(ts)
 
-    # Update the row: columns D (uscita) and E (durata)
-    sheet.update_cell(open_row_index, 4, uscita_str)   # col D
-    sheet.update_cell(open_row_index, 5, durata_str)   # col E
+    sheet.update_cell(open_row_index, 4, format_ts(ts))
 
     return {
         "status": "ok",
         "entrata": open_entrata_str,
-        "uscita": uscita_str,
+        "uscita": format_ts(ts),
         "durata": durata_str,
     }
